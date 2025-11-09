@@ -43,6 +43,27 @@ export async function POST(request, { params }) {
     // Sanitize input
     const sanitizedContent = sanitizeInput(content);
 
+    // Moderation check (optional)
+    try {
+      if (process.env.OPENAI_API_KEY) {
+        const mres = await fetch('https://api.openai.com/v1/moderations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+          body: JSON.stringify({ model: 'omni-moderation-latest', input: sanitizedContent.slice(0,5000) }),
+        });
+        if (mres.ok) {
+          const mj = await mres.json();
+          const flagged = mj?.results?.[0]?.flagged;
+          if (flagged) {
+            return NextResponse.json(
+              { success: false, message: 'Comment blocked by moderation' },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    } catch (_) { /* allow if moderation unavailable */ }
+
     // Create comment
     const comment = await Comment.create({
       postId: id,

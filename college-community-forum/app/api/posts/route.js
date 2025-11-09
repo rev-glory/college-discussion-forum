@@ -108,6 +108,27 @@ export async function POST(request) {
       );
     }
 
+    // Moderation check (optional)
+    try {
+      if (process.env.OPENAI_API_KEY) {
+        const mres = await fetch('https://api.openai.com/v1/moderations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+          body: JSON.stringify({ model: 'omni-moderation-latest', input: `${title}\n\n${content}`.slice(0,5000) }),
+        });
+        if (mres.ok) {
+          const mj = await mres.json();
+          const flagged = mj?.results?.[0]?.flagged;
+          if (flagged) {
+            return NextResponse.json(
+              { success: false, message: 'Content not allowed by moderation' },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    } catch (_) { /* graceful: allow post if moderation unavailable */ }
+
     // Sanitize inputs
     const sanitizedTitle = sanitizeInput(title);
     const sanitizedContent = sanitizeInput(content);
@@ -122,6 +143,31 @@ export async function POST(request) {
       category: sanitizedCategory,
       tags: sanitizedTags,
     });
+
+    // Try to enrich with embedding (optional)
+    try {
+      if (process.env.OPENAI_API_KEY) {
+        const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: `${sanitizedTitle}\n\n${sanitizedContent}`.slice(0, 8000),
+          }),
+        });
+        if (embedRes.ok) {
+          const embedData = await embedRes.json();
+          const vector = embedData?.data?.[0]?.embedding || [];
+          if (Array.isArray(vector) && vector.length) {
+            post.embedding = vector;
+            await post.save();
+          }
+        }
+      }
+    } catch (_) { /* ignore embedding errors */ }
 
     // Populate author info
     await post.populate('authorId', 'name email branch year profilePic role');

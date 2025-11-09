@@ -31,6 +31,12 @@ const PostSchema = new mongoose.Schema({
     trim: true,
     maxlength: [50, 'Category cannot be more than 50 characters'],
   },
+  embedding: {
+    // OpenAI text-embedding-3-small vector
+    type: [Number],
+    default: [],
+    select: true,
+  },
   likes: {
     type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     default: [],

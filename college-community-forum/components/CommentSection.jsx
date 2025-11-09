@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { User as UserIcon, Send } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User as UserIcon, Send, Sparkles } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useAuth } from './AuthProvider';
 import toast from 'react-hot-toast';
@@ -12,6 +12,27 @@ export default function CommentSection({ postId, initialComments }) {
   const [comments, setComments] = useState(initialComments || []);
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiImproved, setAiImproved] = useState('');
+  const [showImprove, setShowImprove] = useState(false);
+  const [smartEnabled, setSmartEnabled] = useState(false);
+  const [ghostText, setGhostText] = useState('');
+
+  useEffect(() => {
+    if (!smartEnabled) { setGhostText(''); return; }
+    if (!content || content.length < 12) { setGhostText(''); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/ai/improveText', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: `Continue this thought in a short friendly way: ${content}` })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setGhostText(data.improvedText?.slice(0, 100) || '');
+      } catch (_) {}
+    }, 500);
+    return () => clearTimeout(t);
+  }, [content, smartEnabled]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,14 +83,53 @@ export default function CommentSection({ postId, initialComments }) {
             className="input-field min-h-[100px] resize-none"
             disabled={isSubmitting}
           />
-          <button
-            type="submit"
-            disabled={isSubmitting || !content.trim()}
-            className="btn-primary mt-3 flex items-center space-x-2 disabled:opacity-50"
-          >
-            <Send className="w-4 h-4" />
-            <span>{isSubmitting ? 'Posting...' : 'Post Comment'}</span>
-          </button>
+          {smartEnabled && ghostText && (
+            <div className="text-xs text-muted-foreground mt-1">Suggestion: {ghostText}</div>
+          )}
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/ai/improveText', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: content }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.message || 'AI failed');
+                  setAiImproved(data.improvedText || '');
+                  setShowImprove(true);
+                } catch (_) { toast.error('AI unavailable'); }
+              }}
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4"/> Improve with AI
+            </button>
+            <label className="inline-flex items-center gap-2 text-sm ml-auto">
+              <input type="checkbox" checked={smartEnabled} onChange={(e)=>setSmartEnabled(e.target.checked)} />
+              Enable Smart Suggestions
+            </label>
+            <button
+              type="submit"
+              disabled={isSubmitting || !content.trim()}
+              className="btn-primary flex items-center space-x-2 disabled:opacity-50"
+            >
+              <Send className="w-4 h-4" />
+              <span>{isSubmitting ? 'Posting...' : 'Post Comment'}</span>
+            </button>
+          </div>
+
+          {showImprove && (
+            <div className="mt-3 p-3 rounded-md border border-border">
+              <div className="text-xs font-medium mb-2">AI Suggestion</div>
+              <div className="text-sm whitespace-pre-wrap">{aiImproved}</div>
+              <div className="flex gap-2 justify-end mt-2">
+                <button className="btn-secondary btn-sm" onClick={()=>setShowImprove(false)}>Dismiss</button>
+                <button className="btn-primary btn-sm" onClick={()=>{ setContent(aiImproved); setShowImprove(false); }}>Apply</button>
+              </div>
+            </div>
+          )}
         </form>
       )}
 

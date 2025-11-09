@@ -106,6 +106,30 @@ export async function PUT(request, { params }) {
     post.tags = sanitizedTags;
     post.updatedAt = Date.now();
 
+    // Try to refresh embedding (optional)
+    try {
+      if (process.env.OPENAI_API_KEY) {
+        const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: `${sanitizedTitle}\n\n${sanitizedContent}`.slice(0, 8000),
+          }),
+        });
+        if (embedRes.ok) {
+          const embedData = await embedRes.json();
+          const vector = embedData?.data?.[0]?.embedding || [];
+          if (Array.isArray(vector) && vector.length) {
+            post.embedding = vector;
+          }
+        }
+      }
+    } catch (_) { /* ignore embedding errors */ }
+
     await post.save();
     await post.populate('authorId', 'name email branch year profilePic role');
 

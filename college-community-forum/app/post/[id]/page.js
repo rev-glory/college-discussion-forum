@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Heart, User as UserIcon, ArrowLeft } from 'lucide-react';
 import CommentSection from '@/components/CommentSection';
+import { Brain, Sparkles } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useAuth } from '@/components/AuthProvider';
 import toast from 'react-hot-toast';
@@ -18,6 +19,8 @@ export default function PostDetailPage() {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [summary, setSummary] = useState('');
+  const [showSummary, setShowSummary] = useState(false);
 
   useEffect(() => {
     fetchPost();
@@ -144,6 +147,18 @@ export default function PostDetailPage() {
 
           {/* Actions */}
           <div className="flex items-center space-x-6 pt-6 border-t border-border">
+            <button onClick={async ()=>{
+              try {
+                const res = await fetch('/api/ai/summarize', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postId: resolvedParams.id })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'AI failed');
+                setSummary(data.summary || ''); setShowSummary(true);
+              } catch (_) { toast.error('AI unavailable'); }
+            }} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
+              <Brain className="w-5 h-5"/> Summarize
+            </button>
             <button
               onClick={handleLike}
               className={`flex items-center space-x-2 hover:text-red-500 transition-colors ${
@@ -159,6 +174,18 @@ export default function PostDetailPage() {
         {/* Comments Section */}
         <CommentSection postId={resolvedParams.id} initialComments={post.comments || []} />
       </div>
+
+      {showSummary && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="card-custom p-6 max-w-xl w-full">
+            <h3 className="font-semibold mb-2 flex items-center gap-2"><Brain className="w-4 h-4"/> TL;DR</h3>
+            <p className="text-sm whitespace-pre-wrap">{summary}</p>
+            <div className="flex justify-end mt-4">
+              <button className="btn-primary" onClick={()=>setShowSummary(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

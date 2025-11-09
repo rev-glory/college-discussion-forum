@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import PostCard from '@/components/PostCard';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/components/AuthProvider';
 
 export default function Home() {
   const [posts, setPosts] = useState([]);
@@ -12,20 +13,41 @@ export default function Home() {
   const [category, setCategory] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [recommended, setRecommended] = useState([]);
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchPosts();
   }, [page, searchQuery, category]);
 
+  useEffect(() => {
+    (async () => {
+      if (!user) { setRecommended([]); return; }
+      try {
+        const res = await fetch(`/api/ai/recommendPosts?userId=${user.id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setRecommended(data.posts || []);
+      } catch (_) {}
+    })();
+  }, [user]);
+
   const fetchPosts = async () => {
     setLoading(true);
     try {
+      if (searchQuery) {
+        // Use semantic search endpoint when searching
+        const res = await fetch(`/api/ai/search?query=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        setPosts(Array.isArray(data.posts) ? data.posts : []);
+        setTotalPages(1);
+        return;
+      }
+
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '10',
       });
-
-      if (searchQuery) params.append('q', searchQuery);
       if (category) params.append('category', category);
 
       const response = await fetch(`/api/posts?${params}`);
@@ -61,6 +83,18 @@ export default function Home() {
           Connect, share, and learn with your college community
         </p>
       </div>
+      
+      {/* Recommended */}
+      {recommended.length > 0 && (
+        <div className="mb-8 card-custom p-4">
+          <div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4"/> <h2 className="font-semibold">Recommended for you</h2></div>
+          <div className="grid gap-3">
+            {recommended.map((post) => (
+              <PostCard key={post._id} post={post} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div className="card-custom p-4 mb-6">
