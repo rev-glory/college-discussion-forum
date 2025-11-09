@@ -6,9 +6,11 @@ import { formatDate } from '@/lib/utils';
 import { useState } from 'react';
 import { useAuth } from './AuthProvider';
 import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
 
 export default function PostCard({ post, onDelete, onLike }) {
   const { user } = useAuth();
+  const router = useRouter();
   const [likeCount, setLikeCount] = useState(post.likeCount || 0);
   const [liked, setLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
@@ -94,13 +96,17 @@ export default function PostCard({ post, onDelete, onLike }) {
               <UserIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <Link
-                href={`/profile/${post.authorId?._id || post.author?._id}`}
-                className="font-semibold hover:text-primary transition-colors"
-                onClick={(e) => e.stopPropagation()}
+              <button
+                type="button"
+                className="font-semibold hover:text-primary transition-colors text-left"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const pid = post.authorId?._id || post.author?._id;
+                  if (pid) router.push(`/profile/${pid}`);
+                }}
               >
                 {post.authorId?.name || post.author?.name || 'Unknown'}
-              </Link>
+              </button>
               <p className="text-sm text-muted-foreground">
                 {post.authorId?.branch || post.author?.branch} • {formatDate(post.createdAt)}
               </p>
