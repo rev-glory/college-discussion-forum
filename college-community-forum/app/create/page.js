@@ -191,11 +191,13 @@ export default function CreatePostPage() {
             </p>
             {suggestedTags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
-                {suggestedTags.map((t) => (
-                  <button key={t} type="button" onClick={() => {
+                {suggestedTags.map((t, idx) => (
+                  <button key={`${t}-${idx}`} type="button" onClick={() => {
                     const current = formData.tags ? formData.tags.split(',').map(s=>s.trim()).filter(Boolean) : [];
-                    if (!current.includes(t)) {
-                      setFormData({ ...formData, tags: [...current, t].join(', ') });
+                    const lower = current.map(x => x.toLowerCase());
+                    if (!lower.includes(t.toLowerCase())) {
+                      const next = [...current, t].slice(0, 10);
+                      setFormData({ ...formData, tags: next.join(', ') });
                     }
                   }} className="px-2 py-1 text-xs rounded-full bg-secondary hover:bg-secondary/80">
                     #{t}
@@ -214,7 +216,24 @@ export default function CreatePostPage() {
                   });
                   const data = await res.json();
                   if (!res.ok) throw new Error(data.message || 'AI failed');
-                  setSuggestedTags(data.tags || []);
+
+                  // Client-side normalization for robust display (defensive against odd API outputs)
+                  const raw = Array.isArray(data.tags) ? data.tags : [];
+                  const clean = Array.from(new Set(
+                    raw
+                      .flatMap(t => (typeof t === 'string' ? t : String(t)))
+                      .map(t => t.replace(/```\s*json\s*|```/gi, ''))
+                      .flatMap(t => t.split(/[\n,;]+/))
+                      .map(t => t.replace(/[\[\]{}()]/g, ''))
+                      .map(t => t.replace(/[#\"'`]/g, ''))
+                      .map(t => t.replace(/\s+/g, ' ').trim())
+                      .filter(t => t.toLowerCase() !== 'json')
+                      .map(t => t.replace(/[^a-zA-Z0-9\- ]/g, ''))
+                      .map(t => t.slice(0, 30))
+                      .filter(Boolean)
+                  )).slice(0, 10);
+
+                  setSuggestedTags(clean);
                 } catch (_) { toast.error('AI unavailable'); }
               }}
               className="btn-secondary mt-2 inline-flex items-center gap-2"
