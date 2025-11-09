@@ -45,15 +45,17 @@ export async function POST(request, { params }) {
 
     // Moderation check (optional)
     try {
-      if (process.env.OPENAI_API_KEY) {
-        const mres = await fetch('https://api.openai.com/v1/moderations', {
+      if (process.env.GEMINI_API_KEY) {
+        const prompt = `You are a strict content moderator for a college forum. Analyze the following text for policy violations (hate, harassment, sexual content with minors, extreme violence, self-harm instructions, and spam). Respond ONLY with compact JSON: {\"flagged\": true|false}.\n\nText:\n${sanitizedContent.slice(0,5000)}`;
+        const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-          body: JSON.stringify({ model: 'omni-moderation-latest', input: sanitizedContent.slice(0,5000) }),
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 20 } })
         });
-        if (mres.ok) {
-          const mj = await mres.json();
-          const flagged = mj?.results?.[0]?.flagged;
+        if (resp.ok) {
+          const data = await resp.json();
+          const textOut = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const flagged = (()=>{ try { return !!JSON.parse(textOut).flagged; } catch { return false; } })();
           if (flagged) {
             return NextResponse.json(
               { success: false, message: 'Comment blocked by moderation' },

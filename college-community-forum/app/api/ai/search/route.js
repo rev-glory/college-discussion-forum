@@ -16,19 +16,19 @@ export async function GET(request) {
     const query = searchParams.get('query') || '';
     if (!query) return NextResponse.json({ posts: [] });
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     await dbConnect();
 
     let queryEmbedding = [];
     if (apiKey) {
-      const er = await fetch('https://api.openai.com/v1/embeddings', {
+      const er = await fetch('https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: 'text-embedding-3-small', input: query.slice(0, 8000) })
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({ content: { parts: [{ text: query.slice(0, 8000) }] } })
       });
       if (er.ok) {
         const ej = await er.json();
-        queryEmbedding = ej?.data?.[0]?.embedding || [];
+        queryEmbedding = ej?.embedding?.values || [];
       }
     }
 

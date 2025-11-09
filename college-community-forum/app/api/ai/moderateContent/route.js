@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
+
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const ai = new GoogleGenAI({});
 
 export async function POST(request) {
   try {
@@ -7,24 +11,26 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Missing text' }, { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ approved: true });
     }
 
-    const res = await fetch('https://api.openai.com/v1/moderations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'omni-moderation-latest', input: text.slice(0, 5000) })
+    const prompt = `You are a strict content moderator for a college forum. Analyze the following text for policy violations (hate, harassment, sexual content with minors, extreme violence, self-harm instructions, and spam). Respond ONLY with compact JSON: {\"flagged\": true|false}.\n\nText:\n${text.slice(0,5000)}`;
+
+    const res = await ai.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      generationConfig: { temperature: 0, maxOutputTokens: 20 },
+      safetySettings: [],
     });
 
-    if (!res.ok) {
-      return NextResponse.json({ approved: true });
-    }
+    let flagged = false;
+    try {
+      const out = typeof res.text === 'string' ? res.text : '{}';
+      const j = JSON.parse(out);
+      flagged = !!j.flagged;
+    } catch {}
 
-    const data = await res.json();
-    const result = data?.results?.[0];
-    const flagged = result?.flagged || false;
     return NextResponse.json({ approved: !flagged, reason: flagged ? 'Content flagged by moderation.' : undefined });
   } catch (error) {
     return NextResponse.json({ approved: true });

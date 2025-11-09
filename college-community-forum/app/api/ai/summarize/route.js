@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
 import Post from '@/models/Post';
 import Comment from '@/models/Comment';
+import { GoogleGenAI } from '@google/genai';
 
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const ai = new GoogleGenAI({});
 
 export async function POST(request) {
   try {
@@ -16,37 +18,21 @@ export async function POST(request) {
 
     const comments = await Comment.find({ postId }).sort({ createdAt: -1 }).limit(15).lean();
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    if (!process.env.GEMINI_API_KEY) {
       // Fallback: simple short excerpt
       const base = `${post.title}. ${post.content}`.slice(0, 240);
       return NextResponse.json({ summary: base + (post.content.length > 240 ? '…' : '') });
     }
 
-    const convo = [
-      { role: 'system', content: 'You summarize forum threads into concise, neutral TL;DRs (2-4 sentences).' },
-      { role: 'user', content: `Summarize the following post and key comments into a short TL;DR.
+    const prompt = `Summarize the following forum post and key comments into a concise, neutral TL;DR (2-4 sentences).\n\nTitle: ${post.title}\nCategory: ${post.category || 'General'}\nTags: ${post.tags?.join(', ') || 'None'}\n\nPost:\n${post.content}\n\nRecent comments:\n${comments.map(c=>`- ${c.content}`).join('\n')}`;
 
-Title: ${post.title}
-Category: ${post.category || 'General'}
-Tags: ${post.tags?.join(', ') || 'None'}
-
-Post:
-${post.content}
-
-Recent comments:
-${comments.map(c=>`- ${c.content}`).join('\n')}` }
-    ];
-
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: MODEL, messages: convo, temperature: 0.3, max_tokens: 220 })
+    const res = await ai.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      generationConfig: { temperature: 0.3, maxOutputTokens: 220 },
     });
 
-    if (!res.ok) return NextResponse.json({ message: 'AI service error' }, { status: 502 });
-    const data = await res.json();
-    const summary = data?.choices?.[0]?.message?.content?.trim() || '';
+    const summary = (typeof res.text === 'string' ? res.text : '').trim();
     return NextResponse.json({ summary });
   } catch (error) {
     return NextResponse.json({ message: 'Failed to summarize' }, { status: 500 });

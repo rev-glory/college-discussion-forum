@@ -108,21 +108,20 @@ export async function PUT(request, { params }) {
 
     // Try to refresh embedding (optional)
     try {
-      if (process.env.OPENAI_API_KEY) {
-        const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+      if (process.env.GEMINI_API_KEY) {
+        const embedRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'x-goog-api-key': process.env.GEMINI_API_KEY,
           },
           body: JSON.stringify({
-            model: 'text-embedding-3-small',
-            input: `${sanitizedTitle}\n\n${sanitizedContent}`.slice(0, 8000),
+            content: { parts: [{ text: `${sanitizedTitle}\n\n${sanitizedContent}`.slice(0, 8000) }] }
           }),
         });
         if (embedRes.ok) {
           const embedData = await embedRes.json();
-          const vector = embedData?.data?.[0]?.embedding || [];
+          const vector = embedData?.embedding?.values || [];
           if (Array.isArray(vector) && vector.length) {
             post.embedding = vector;
           }

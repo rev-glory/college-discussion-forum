@@ -32,7 +32,7 @@ const PostSchema = new mongoose.Schema({
     maxlength: [50, 'Category cannot be more than 50 characters'],
   },
   embedding: {
-    // OpenAI text-embedding-3-small vector
+    // Text embedding vector (e.g., text-embedding-004)
     type: [Number],
     default: [],
     select: true,

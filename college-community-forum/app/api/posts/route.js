@@ -110,15 +110,17 @@ export async function POST(request) {
 
     // Moderation check (optional)
     try {
-      if (process.env.OPENAI_API_KEY) {
-        const mres = await fetch('https://api.openai.com/v1/moderations', {
+      if (process.env.GEMINI_API_KEY) {
+        const prompt = `You are a strict content moderator for a college forum. Analyze the following text for policy violations (hate, harassment, sexual content with minors, extreme violence, self-harm instructions, and spam). Respond ONLY with compact JSON: {\"flagged\": true|false}.\n\nText:\n${`${title}\n\n${content}`.slice(0,5000)}`;
+        const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-          body: JSON.stringify({ model: 'omni-moderation-latest', input: `${title}\n\n${content}`.slice(0,5000) }),
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 20 } })
         });
-        if (mres.ok) {
-          const mj = await mres.json();
-          const flagged = mj?.results?.[0]?.flagged;
+        if (resp.ok) {
+          const data = await resp.json();
+          const textOut = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const flagged = (()=>{ try { return !!JSON.parse(textOut).flagged; } catch { return false; } })();
           if (flagged) {
             return NextResponse.json(
               { success: false, message: 'Content not allowed by moderation' },
@@ -146,21 +148,20 @@ export async function POST(request) {
 
     // Try to enrich with embedding (optional)
     try {
-      if (process.env.OPENAI_API_KEY) {
-        const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+      if (process.env.GEMINI_API_KEY) {
+        const embedRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'x-goog-api-key': process.env.GEMINI_API_KEY,
           },
           body: JSON.stringify({
-            model: 'text-embedding-3-small',
-            input: `${sanitizedTitle}\n\n${sanitizedContent}`.slice(0, 8000),
+            content: { parts: [{ text: `${sanitizedTitle}\n\n${sanitizedContent}`.slice(0, 8000) }] }
           }),
         });
         if (embedRes.ok) {
           const embedData = await embedRes.json();
-          const vector = embedData?.data?.[0]?.embedding || [];
+          const vector = embedData?.embedding?.values || [];
           if (Array.isArray(vector) && vector.length) {
             post.embedding = vector;
             await post.save();

@@ -42,19 +42,19 @@ export async function GET(request) {
     });
 
     // If embeddings available and key set, refine by vector similarity to a profile string
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
       const profileText = likedPosts.map(p=>`${p.title}. ${p.content}` ).join('\n').slice(0, 8000) || topTags.join(', ');
       if (profileText) {
         try {
-          const er = await fetch('https://api.openai.com/v1/embeddings', {
+          const er = await fetch('https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({ model: 'text-embedding-3-small', input: profileText })
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+            body: JSON.stringify({ content: { parts: [{ text: profileText }] } })
           });
           if (er.ok) {
             const ej = await er.json();
-            const userVec = ej?.data?.[0]?.embedding || [];
+            const userVec = ej?.embedding?.values || [];
             scored = recent.map(p => ({ p, score: (scored.find(s=>s.p._id.toString()===p._id.toString())?.score||0) + 2*(cosineSim(userVec, p.embedding||[])) }));
           }
         } catch {}

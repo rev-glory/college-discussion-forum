@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
 
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const ai = new GoogleGenAI({});
 
 export async function POST(request) {
   try {
@@ -9,8 +11,7 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Missing title or content' }, { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    if (!process.env.GEMINI_API_KEY) {
       // Fallback: naive tags from keywords
       const base = `${title || ''} ${content || ''}`.toLowerCase();
       const seeds = ['Event','Help','Hackathon','Academic','Clubs','General','Announcements','Project'];
@@ -18,41 +19,22 @@ export async function POST(request) {
       return NextResponse.json({ tags });
     }
 
-    const prompt = `Suggest 3-6 concise, relevant tags for the following forum post. Output as a JSON array of strings only (e.g., ["Help","Hackathon"]). Avoid duplicates and special characters.
+    const prompt = `Suggest 3-6 concise, relevant tags for the following forum post. Output as a JSON array of strings only (e.g., [\"Help\",\"Hackathon\"]). Avoid duplicates and special characters.\n\nTitle: ${title || ''}\nContent: ${content || ''}`;
 
-Title: ${title || ''}
-Content: ${content || ''}`;
-
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: 'You generate clean JSON arrays of relevant tags.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.2,
-        max_tokens: 120,
-      }),
+    const res = await ai.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      generationConfig: { temperature: 0.2, maxOutputTokens: 120 },
     });
 
-    if (!res.ok) {
-      return NextResponse.json({ message: 'AI service error' }, { status: 502 });
-    }
-
-    const data = await res.json();
-    const contentText = data?.choices?.[0]?.message?.content || '[]';
+    const contentText = (typeof res.text === 'string' ? res.text : '[]');
     let tags = [];
-    try { tags = JSON.parse(contentText); } catch { /* try to recover */
+    try { tags = JSON.parse(contentText); } catch {
       tags = contentText
         .replace(/\n/g, ' ')
         .replace(/[\[\]]/g,'')
         .split(',')
-        .map(s=>s.replace(/"/g,'').trim())
+        .map(s=>s.replace(/\"/g,'').trim())
         .filter(Boolean)
         .slice(0,6);
     }
